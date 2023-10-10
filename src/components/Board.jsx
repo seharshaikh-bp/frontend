@@ -1,121 +1,127 @@
-import React,{ useState, useEffect } from 'react';
-import {DragDropContext , Draggable, Droppable} from 'react-beautiful-dnd';
+import React, { useState, useEffect } from 'react';
+import { DragDropContext, Droppable } from 'react-beautiful-dnd';
 import styled from 'styled-components';
-import  Column from './Column';
+import Column from './Column';
 import AddColumn from './AddColumn';
 
-
 const Container = styled.div`
-     display: flex;
-    `
-
+  display: flex;
+`;
 
 function Board(props) {
-    const initialData = { tasks: {}, columns: {}, columnOrder: [] };
-    const [board, setBoard] = useState(initialData);
+    const initialData = {tasks: {}, columns: {}, columnOrder: []};
+    const [state, setState] = useState(initialData);
 
     useEffect(() => {
-        fetchBoard().then(data => setBoard(data));
-    }, []);
+        fetchBoard().then(board => setState(board));
+    }, [props.token]);
+
+    useEffect(() => {
+        if (state !== initialData) {
+            saveBoard();
+        }
+    }, [state]);
+
+    async function saveBoard() {
+        const response = await fetch("/board", {
+            method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    "Authorization" : "Bearer " + props.token
+                },
+            body: JSON.stringify(state)
+        });
+        const data = await response.json();
+    }
 
     async function fetchBoard() {
-        const response = await fetch('/board');
+        const response = await fetch('/board', {headers: {"Authorization" : "Bearer " + props.token}});
         const data = await response.json();
         return data.board;
     }
 
+    function onDragEnd(result) {
+        const { destination, source, draggableId, type } = result;
 
-
-    function onDragEnd(result)
-    {
-        const { destination,source,draggableId,type } = result;
-
-        if (!destination){
+        if (!destination) {
+            return;
+        }
+        
+        if (destination.droppableId === source.droppableId && destination.index === source.index) {
             return;
         }
 
-        if (destination.droppableId === source.droppableId && destination.index === source.index){
+        if (type === 'column') {
+            const newColumnOrder = Array.from(state.columnOrder);
+            newColumnOrder.splice(source.index, 1);
+            newColumnOrder.splice(destination.index, 0, draggableId);
+      
+            setState({
+                ...state,
+                columnOrder: newColumnOrder,
+            });
             return;
         }
 
-        if (type ==='column'){
-            const newColumnOrder = Array.from(board.columnOrder);
-            newColumnOrder.splice(source.index,1);
-            newColumnOrder.splice(destination.index,0,draggableId);
+        const start = state.columns[source.droppableId]; 
+        const finish = state.columns[destination.droppableId]; 
 
-                setBoard({
-                    ...board,
-                    columnOrder:newColumnOrder,
-                })
-                return;
-        }
-        const start = board.columns[source.droppableId];
-        const finish = board.columns[destination.droppableId];
-
-        if(start == finish){
+        if (start === finish) {
             const newTaskIds = Array.from(start.taskIds);
-            newTaskIds.splice(source.index,1)
-            newTaskIds.splice(destination.index,0,draggableId);
-
+            newTaskIds.splice(source.index, 1);
+            newTaskIds.splice(destination.index, 0, draggableId);
+      
             const newColumn = {
                 ...start,
-                taskIds: newTaskIds
+                taskIds: newTaskIds,
             }
-
-            setBoard({
-                ...board,
+      
+            setState({...state, 
                 columns: {
-                    ...board.columns,
-                    [newColumn.id]: newColumn
-                }
+                ...state.columns,
+                [newColumn.id]: newColumn}
             });
             return;
         }
 
         const startTaskIds = Array.from(start.taskIds);
-        startTaskIds.splice(source.index,1);
-
-        const newStartColumn = {
+        startTaskIds.splice(source.index, 1);
+        const newStart = {
             ...start,
-            taskIds: startTaskIds
+            taskIds: startTaskIds,
         }
-        
+    
         const finishTaskIds = Array.from(finish.taskIds);
-        finishTaskIds.splice(destination.index,0,draggableId);
-
-        const newFinishColumn = {
+        finishTaskIds.splice(destination.index, 0, draggableId);
+        const newFinish = {
             ...finish,
-            taskIds: finishTaskIds
+            taskIds: finishTaskIds,
         }
-
-        setBoard({
-            ...board,
+    
+        setState({...state, 
             columns: {
-                ...board.columns,
-                [newStartColumn.id]: newStartColumn,
-                [newFinishColumn.id]: newFinishColumn 
+                ...state.columns,
+                [newStart.id]: newStart,
+                [newFinish.id]: newFinish,
             }
         });
-        return;
     }
-
-
 
     return (
         <DragDropContext onDragEnd={onDragEnd}>
-            <AddColumn board={board} setBoard={setBoard}/>
+            <AddColumn state={state} setState={setState} />
             <Droppable droppableId="all-columns" direction="horizontal" type="column">
-                {provided =>(
-                <Container {...provided.droppableProps} ref={provided.innerRef}>
-                    {
-                        board.columnOrder.map((columnId, index) => {
-                            const column = board.columns[columnId];
-                            const tasks = column.taskIds.map(taskIds => board.tasks[taskIds]);
-                            return <Column key={column.id} column={column} tasks={tasks} index={index} board ={board} setBoard={setBoard}/>;
-                        })
-                    }
-                {provided.placeholder}
-                </Container>
+                {provided => (
+                    <Container {...provided.droppableProps} ref={provided.innerRef}>
+                        {
+                            state.columnOrder.map((columnId, index) => {
+                                const column = state.columns[columnId];
+                                const tasks = column.taskIds.map(taskId => state.tasks[taskId]);
+                                return <Column key={column.id} column={column} tasks={tasks} index={index} state={state} setState={setState} />;
+                            })
+                        }
+                        {provided.placeholder}
+                    </Container>
                 )}
             </Droppable>
         </DragDropContext>
@@ -123,4 +129,3 @@ function Board(props) {
 }
 
 export default Board;
-
